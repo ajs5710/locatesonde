@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!-- created following the location based example from the documentation for the library found here: https://ar-js-org.github.io/AR.js-Docs/ -->
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Location Based AR of SondeHub API points</title>
+
+    <script type="text/javascript">
+      window.onload = () => {
+        navigator.geolocation.getCurrentPosition(function(pos){
+          // the altitude in meters // default to ~altitude of chicago
+          let camAltitude = pos.coords.altitude;
+
+          if (camAltitude){
+            document.getElementById("altitude").value = camAltitude;
+          }
+        });
+      }
+      
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 50px;
+        }
+        .container {
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        input {
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        .button-container {
+            width: 100%;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+        }
+        button {
+            padding: 10px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sonde Tracker</h1>
+        <input type="text" id="sondehub-id" placeholder="Sondehub Tracking Number">
+        <input type="text" id="altitude" placeholder="Your Altitude in Meters">
+        <div class="button-container">
+          <button id="submitButton">Locate Sonde</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('submitButton').addEventListener('click', function() {
+            const text1 = document.getElementById('sondehub-id').value;
+            const text2 = document.getElementById('altitude').value;
+            // alert(`Text Box 1: ${text1}\nText Box 2: ${text2}`);
+            window.open(`/locatesonde.html?id=${text1}&camAlt=${text2}`, '_blank');
+        });
+    </script>
+</body>
+</html>

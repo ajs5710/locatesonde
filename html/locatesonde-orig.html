@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<!-- created following the location based example from the documentation for the library found here: https://ar-js-org.github.io/AR.js-Docs/ -->
+<html>
+  <head>
+    <title>Location Based AR of SondeHub API points</title>
+    
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/three.js/build/ar-threex-location-only.js'></script>
+    <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js'></script>
+
+    <script>
+      const getCoords = async () => {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        
+        return pos.coords;
+      };
+
+      
+
+      window.onload = async () => {   
+        navigator.geolocation.getCurrentPosition(function(pos){
+          // the altitude in meters // default to ~altitude of chicago
+          let camAltitude = pos.coords.altitude || 185;
+
+        
+          let points = staticLoadPlaces();
+          renderPoints(camAltitude, points);
+        });
+
+        fetch("https://api.v2.sondehub.org/amateur/telemetry?duration=6h&payload_callsign=BSS49").then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        }).then(data => {
+          console.log(data);
+        }).catch(error => {
+          console.error('There was a problem with the fetch operation:', error);
+        });
+      };
+
+      function staticLoadPlaces() {
+        return [
+          {
+            name: 'house',
+            color: 'green',
+            location: {
+              lat: 41.8377295,
+              lng: -87.6562099,
+              alt: 182
+            }
+          },
+          // {
+          //   name: 'test',
+          //   color: 'red',
+          //   location: {
+          //     lat: 41.8377295,
+          //     lng: -87.6562099,
+          //   }
+          // },
+          {
+            name: 'maria\'s',
+            color: 'blue',
+            location: {
+              lat: 41.8379652,
+              lng: -87.6513216,
+              alt: 182
+            }
+          },
+          {
+            name: 'navy pier',
+            color: 'blue',
+            location: {
+              lat: 41.8412918,
+              lng: -87.6242473,
+              alt: 182
+            }
+          }
+        ];
+      }
+                
+
+                // AFRAME.registerComponent('fixed-altitude-gps-place', {
+                //   schema: {
+                //     latitude: { type: 'number', default: 0 },
+                //     longitude: { type: 'number', default: 0 },
+                //     altitude: { type: 'number', default: 0 } // Fixed altitude in meters
+                //   },
+
+                //   init: function () {
+                //     this.el.getAttribute('position').y = this.data.altitude - camAltitude;
+
+                //     this.el.setAttribute('gps-new-entity-place', {
+                //       latitude: this.data.latitude,
+                //       longitude: this.data.longitude
+                //     });
+                //   },
+
+                //   update: function () {
+                //     this.el.getAttribute('position').y = this.data.altitude - camAltitude;
+
+                //     this.el.setAttribute('gps-new-entity-place', {
+                //         latitude: this.data.latitude,
+                //         longitude: this.data.longitude
+                //     });
+                //   }
+                // });
+
+      // <a-entity material='color: red' geometry='primitive: box' gps-new-entity-place="latitude: <add-your-latitude>; longitude: <add-your-longitude>" scale="10 10 10"></a-entity>
+      // <a-entity material="color: red" geometry="primitive: box" gps-new-entity-place="latitude: 41.8377295; longitude: -87.6562099; position: 0 10 0" scale="10 10 10"></a-entity>
+      // <a-entity fixed-altitude-gps-place="latitude: 37.7749; longitude: -122.4194; altitude: 100" geometry="primitive: box; height: 5; width: 5; depth: 5" material="color: red"></a-entity>
+      function renderPoints(points) {
+        let scene = document.getElementById("world-scene");
+        let camera = document.getElementById("world-camera");
+
+        let camAltitude = camera.getAttribute("position").y;
+        // alert(camAltitude);
+        points.forEach((point) => {            
+          let model = document.createElement('a-entity');
+          model.setAttribute('fixed-altitude-gps-place', `latitude: ${point.location.lat}; longitude: ${point.location.lng}; altitude: ${point.location.alt}`);
+          model.setAttribute('geometry', 'primitive: sphere');
+          model.setAttribute('material', `color: ${point.color}`);
+          model.setAttribute('position', '0 10 0');
+          model.setAttribute('scale', '10 10 10');
+          model.setAttribute('look-at', '[gps-new-camera]'); 
+          
+          model.addEventListener('loaded', () => {
+            window.dispatchEvent(new CustomEvent('fixed-altitude-gps-place-loaded'))
+          });
+          
+          scene.appendChild(model);
+        });
+      }
+
+        // const coords = await getCoords();
+    </script>
+  </head>
+  <body>
+    <a-scene id='world-scene' vr-mode-ui='enabled: false' arjs='sourceType: webcam; videoTexture: true; debugUIEnabled: false' renderer='antialias: true; alpha: true'>
+      <a-camera id='world-camera' gps-new-camera='gpsMinDistance: 5'></a-camera>
+      <a-entity material="color: red" geometry="primitive: box" gps-new-entity-place="latitude: 41.8377295; longitude: -87.6562099" position="0 10 0" scale="10 10 10"></a-entity>
+    </a-scene>
+  </body>
+</html>
