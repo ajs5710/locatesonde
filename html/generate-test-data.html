@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<!-- created following the location based example from the documentation for the library found here: https://ar-js-org.github.io/AR.js-Docs/ -->
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Generate Test Data</title>
+
+    <script type="text/javascript">
+
+    // // would it be useful to make the test-data generator prefill lat/lon/alt from current location if available? 
+    //     window.onload = () => {
+    //         navigator.geolocation.getCurrentPosition(function(pos){
+    //             // the altitude in meters // default to ~altitude of chicago
+    //             let camAltitude = pos.coords.altitude;
+    // 
+    //             if (camAltitude){
+    //                 document.getElementById("altitude").value = camAltitude;
+    //             }
+    //         });
+    //     }
+      
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 50px;
+        }
+        .container {
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        input {
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        .button-container {
+            width: 100%;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+        }
+        button {
+            padding: 10px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            box-sizing: border-box; /* Ensures padding and border are included in width */
+            padding: 10px;
+            font-size: 16px;
+            resize: vertical; /* Allows vertical resizing */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generate Test Data</h1>
+        <input type="text" id="sondehub-id" placeholder="Sondehub Tracking Number">
+        <input type="text" id="latitude" placeholder="Your 'launch' latitude">
+        <input type="text" id="longitude" placeholder="Your 'launch' longitude">
+        <input type="text" id="altitude" placeholder="Your 'launch' altitude in meters">
+        <div class="button-container">
+          <button id="submitButton">Generate Test Data</button>
+        </div>
+    </div>
+    <textarea id="test-data" width="100%">Generated test data will fill this space.</textarea>
+
+    <script>
+        document.getElementById('submitButton').addEventListener('click', function() {
+            const callsign = document.getElementById('sondehub-id').value;
+            const latitude = document.getElementById('latitude').value;
+            const longitude = document.getElementById('longitude').value;
+            const altitude = document.getElementById('altitude').value;
+
+            fetch("/api?duration=6h&payload_callsign=" + callsign, {redirect: 'follow'}).then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              return response.json();
+            }).then(data => {
+                let offsetLat, offsetLon, offsetAlt;
+
+                console.log(data)
+                
+                Object.values(data[callsign]).forEach((point) => {
+                    if (!offsetLat && point.lat){
+                        offsetLat = point.lat - latitude;
+                    }
+                    if (offsetLat && point.lat){
+                        point.lat = point.lat - offsetLat;
+                    }
+
+                    if (!offsetLon && point.lon){
+                        offsetLon = point.lon - longitude;
+                    }
+                    if (offsetLon && point.lon){
+                        point.lon = point.lon - offsetLon;
+                    }
+
+                    if (!offsetAlt && point.alt){
+                        offsetAlt = point.alt - altitude;
+                    }
+                    if (offsetAlt && point.alt){
+                        point.alt = point.alt - offsetAlt;
+                    }
+                });
+
+                data["TESTING"] = data[callsign]
+                delete data[callsign]
+                document.getElementById('test-data').value = JSON.stringify(data, null, 2);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -11,3 +11,7 @@ Note that the ngrok url will change each time that the container is stopped/star
 
 Once ngrok is running you can visit [localhost:4040](http://localhost:4040) in order to view the running ngrok gateway and see the public url that was exposed.
 Additionally, the nginx listening port is exposed locally as 8080 though it is likely unneeded.
+
+# Testing
+Currently there is no test library in use.  However, in the /html folder is a file named like `test-data.json` and this file is redirected to by the nginx when the Sondehub Tracking Number used is `TESTING` instead of proxying the normal api request.  The data in the test-data file was created by taking a real response from a real balloon and adjusting the lat/lon/alt values so that it was as if they started near a given location/altitude.  Additional test data can be generated using the page `generate-test-data.html` and entering in a currently valid (6h) sondehub id as well as details for the 'launch' site.
+
