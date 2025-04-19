@@ -1,0 +1,2 @@
+# ignore .env files as they may contain secrets
+*.env
