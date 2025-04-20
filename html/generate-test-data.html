@@ -93,8 +93,8 @@
             }).then(data => {
                 let offsetLat, offsetLon, offsetAlt;
 
-                console.log(data)
-                
+                console.log(data);
+
                 Object.values(data[callsign]).forEach((point) => {
                     if (!offsetLat && point.lat){
                         offsetLat = point.lat - latitude;
@@ -118,8 +118,9 @@
                     }
                 });
 
-                data["TESTING"] = data[callsign]
-                delete data[callsign]
+                let testData = data[callsign];
+                delete data[callsign];
+                data["TESTING"] = testData;
                 document.getElementById('test-data').value = JSON.stringify(data, null, 2);
             });
         });
