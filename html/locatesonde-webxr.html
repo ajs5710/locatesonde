@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Location Based AR of SondeHub API points</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<link type="text/css" rel="stylesheet" href="main.css">
+		<script type="importmap">
+	      {
+	        "imports": {
+	          "three": "https://cdn.jsdelivr.net/npm/three@0.175.0/build/three.module.js",
+	          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.175.0/examples/jsm/"
+	        }
+	      }
+	    </script>
+	</head>
+	<body>
+
+		<div id="info">
+			Align phone in direction of North and push Start AR when it turns blue.
+		</div>
+
+		<script type="module">
+
+            import * as THREE from 'three';
+			import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+
+			var camera, scene, renderer;
+			var controller;
+
+			// how far a point should be from the previous point before we care to render it in meters
+			const balloonSignificantTravel = 5;
+			// radius of balloon points in meters
+			const balloonRadius = 3;
+			// how far away to render balloon points accurately - beyond this they stop scaling and are drawn in blue instead of green
+			const farRenderLimit = 10000;
+			// we'll use a standard radius here (in meters) but there should be a way to calculate a more accurate radius for the position of the phone given a lat/lon
+				// something along the lines of https://gis.stackexchange.com/questions/242188/calculating-the-earth-radius-at-latitude
+				// probably won't matter much while the balloon is close-ish to you
+			const earthRadius = 6378137;
+
+			const balloonGeometry = new THREE.SphereGeometry(balloonRadius, 32, 16)
+
+			const redMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+			const blueMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.75 });
+			const greenMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+
+
+
+
+			init();
+			animate();
+
+			function init() {
+
+				const container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				scene = new THREE.Scene();
+
+				// fov, aspect, near render limit, far render limit
+				camera = new THREE.PerspectiveCamera( 36, window.innerWidth / window.innerHeight, 0.01, farRenderLimit );
+
+				renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.setAnimationLoop( animate );
+				renderer.xr.enabled = true;
+				container.appendChild( renderer.domElement );
+
+				// adds the button to Start AR to the DOM
+				let startAR = ARButton.createButton( renderer );
+				startAR.disabled = true;
+				document.body.appendChild( startAR );
+
+				controller = renderer.xr.getController( 0 );
+				// controller.addEventListener( 'select', onSelect );
+				scene.add( controller );
+
+
+
+		        const urlParams = new URLSearchParams(window.location.search);
+        		const callsign = urlParams.get("id")
+
+				// converting the lat/lon/altitude into position relative to camera
+				navigator.geolocation.getCurrentPosition(function(position){
+					// we'll use this as an origin for future calculations 
+					// we'll also use this as the direction of up
+					const phonePos = calcPosFromLatLonRad(position.coords.latitude, position.coords.longitude, earthRadius);
+					const upPhone = phonePos.clone().normalize();
+
+					// draw a circle to be the ground/represent the horizon
+						// we'll parent everything to it and then use it to orient things later
+					let horizon = new THREE.Mesh(
+						new THREE.CylinderGeometry(balloonRadius, balloonRadius, 0.01, 32, 1), 
+						new THREE.MeshBasicMaterial({ color: 0x523507, transparent: true, opacity: 0.5 })
+					);
+					// assume the ground is approximately one meter below us
+					horizon.position.set(0,-1,0);
+					console.log()
+					scene.add(horizon);
+
+					console.log(position);
+					fetch("/api?duration=6h&payload_callsign=" + callsign, {redirect: 'follow'}).then(response => {
+						if (!response.ok) {
+							throw new Error(`HTTP error! status: ${response.status}`);
+						}
+						return response.json();
+					}).then(data => {
+						console.log(data);
+						let prevPoint;
+						Object.values(data[callsign]).forEach((dataPoint) => {
+							let point = calcPosFromLatLonRad(dataPoint.lat, dataPoint.lon, earthRadius);
+							const upPoint = new THREE.Vector3(0, 0, 1); //point.clone().normalize();
+
+							// make the point relative to the phone 
+							point.sub(phonePos);
+
+							// find the rotation axis
+							let rotationAxis = upPoint.clone().cross(upPhone);
+							let rotationAngle = upPoint.dot(upPhone);
+							// rotate the point to align with the up direction of the phone
+							point.applyAxisAngle(rotationAxis, rotationAngle);
+
+							// adjust the altitude to be the altitude of the point - the phone's altitude
+							point.y = dataPoint.alt - position.coords.altitude;
+
+							// if the point would be too far away adjust to still be in render range but change color
+							let pointColor = greenMat;
+							// if the point is outside of our render distance then set it to the edge of render distance and draw it with a different color
+							if (point.length() >= farRenderLimit){
+								pointColor = blueMat;
+								point.setLength(farRenderLimit*0.95);
+							}
+
+							// skip drawing this point if it is too similar to the previous point
+							if (prevPoint){ 
+								console.log(`${prevPoint.toArray()} => ${point.toArray()}`)
+								if (prevPoint.distanceTo(point) < balloonSignificantTravel){
+									console.log("too close skipping " + prevPoint.distanceTo(point))
+									return;
+								}
+							}
+
+							// draw a circle for the point
+							let circlePoint = new THREE.Mesh(balloonGeometry, pointColor);
+
+							circlePoint.position.copy(point);
+							// scene.add(circlePoint);
+							horizon.add(circlePoint);
+
+							// draw a line between the previous point and this one
+							if (prevPoint) {
+								//between the circle positions
+								let geometry = new THREE.BufferGeometry().setFromPoints( [prevPoint, point] );
+								// draw a blue line
+								let line = new THREE.Line(geometry, blueMat);
+								// scene.add(line);
+								horizon.add(line);
+							} else {
+								// draw a line from us to the first point
+								let geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-1,0), point])
+								// draw a red line from our feet to the first point
+								let line = new THREE.Line(geometry, redMat);
+								// scene.add(line);
+								horizon.add(line);
+							}
+							prevPoint = point;
+
+				        });
+
+
+						// enable the Start AR button now that data has loaded
+						startAR.disabled = false;
+						startAR.style.backgroundColor = 'blue';
+					});
+				});
+
+
+				// TODO: rotate the x,z of horizon to be based on where camera is facing when ar starts?
+				// for now might make sense to just point north with the compass app before starting ar
+
+				// this all is used to determine the compass heading
+					// taken from stackoverflow here: https://stackoverflow.com/questions/61336948/calculating-the-cardinal-direction-of-a-smartphone-with-js
+
+				// // the .alpha of deviceorientation seems to be the position relative to the compass
+				// window.addEventListener('deviceorientation', function(e) {
+				//     console.log(e.alpha);
+				// }, false);
+
+
+
+
+
+				window.addEventListener( 'resize', onWindowResize );
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+
+			//
+			function animate() {
+				renderer.render( scene, camera );
+			}
+
+
+			// function to convert lat/lon to coordinates taken from
+				// https://stackoverflow.com/questions/28365948/javascript-latitude-longitude-to-xyz-position-on-earth-threejs/28367325#28367325
+			function calcPosFromLatLonRad(lat,lon,radius){
+				var phi   = (90-lat)*(Math.PI/180);
+				var theta = (lon+180)*(Math.PI/180);
+
+				let x = -((radius) * Math.sin(phi)*Math.cos(theta));
+				let z = ((radius) * Math.sin(phi)*Math.sin(theta));
+				let y = ((radius) * Math.cos(phi));
+			    
+				return new THREE.Vector3(x, y, z);
+			}
+
+
+		</script>
+	</body>
+</html>
+
+

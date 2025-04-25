@@ -24,12 +24,12 @@
       function generatePoint(camAlt, point, color) {
         console.log(point)
         let model = document.createElement('a-entity');
-        model.setAttribute('gps-new-entity-place', `latitude: ${point.lat}; longitude: ${point.lon}; altitude: ${point.alt}`);
+        model.setAttribute('gps-new-entity-place', `latitude: ${point.lat}; longitude: ${point.lon}`);
         model.setAttribute('geometry', 'primitive: sphere');
         model.setAttribute('material', `color: ${color}`);
         model.setAttribute('position', `0 ${point.alt - camAlt} 0`);
         model.setAttribute('scale', '10 10 10');
-        model.setAttribute('look-at', '[gps-new-camera]'); 
+        // model.setAttribute('look-at', '[gps-new-camera]'); 
         
         return model
       }
@@ -47,12 +47,24 @@
         }).then(data => {
           renderPoints(urlParams.get("camAlt"), data[callsign])
         });
+
+        setTimeout(function(){ 
+          generatePoint(150, {
+            "lat": 41.8385659,
+            "lon": -87.6551544,
+            "alt": 160
+          }, "blue")
+        }, 1000)
       }
     </script>
   </head>
   <body>
     <a-scene id='world-scene' vr-mode-ui='enabled: false' arjs='sourceType: webcam; videoTexture: true; debugUIEnabled: false' renderer='antialias: true; alpha: true'>
       <a-camera id='world-camera' gps-new-camera='gpsMinDistance: 5'></a-camera>
+      <a-entity material="color: red" geometry="primitive: sphere" gps-new-entity-place="latitude: 41.83785593065685; longitude: -87.65357114602261" position="0 10 0" scale="10 10 10"></a-entity>
+
+<!--       <a-entity gps-new-entity-place="latitude: 41.8385659; longitude: -87.6551544" geometry="primitive: sphere" material="color: green" position="0 0 0" scale="10 10 10" look-at="[gps-new-camera]"></a-entity>
+      <a-entity gps-new-entity-place="latitude: 41.8385659; longitude: -87.6551544" geometry="primitive: sphere" material="color: green" position="0 50 0" scale="10 10 10" look-at="[gps-new-camera]"></a-entity> -->
     </a-scene>
   </body>
 </html>
