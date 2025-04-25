@@ -3,6 +3,7 @@ This is a project to take something being tracked by https://amateur.sondehub.or
 
 # Getting Started
 The project is made of static pages but currently uses an nginx server to get around some CORS issues with the amateur.sondehub api.  Additionally, it uses ngrok to expose the running nginx for development purposes as it really is meant to be viewed from a phone.
+Currently, the project is really only able to be used in chrome.
 
 You will need to replace the `<authtoken>` in the ngrok.env file with a valid ngrok authtoken.
 
@@ -15,3 +16,7 @@ Additionally, the nginx listening port is exposed locally as 8080 though it is l
 # Testing
 Currently there is no test library in use.  However, in the /html folder is a file named like `test-data.json` and this file is redirected to by the nginx when the Sondehub Tracking Number used is `TESTING` instead of proxying the normal api request.  The data in the test-data file was created by taking a real response from a real balloon and adjusting the lat/lon/alt values so that it was as if they started near a given location/altitude.  Additional test data can be generated using the page `generate-test-data.html` and entering in a currently valid (6h) sondehub id as well as details for the 'launch' site.  The outputted data will then be adjusted so that the first lat/lon/alt lines up with the provided 'launch' site location.
 
+# Developing
+Due to the fact this is done on a phone development is somewhat difficult.
+
+In order to develop effectively it is recommended to turn on [developer options](https://www.samsung.com/uk/support/mobile-devices/how-do-i-turn-on-the-developer-options-menu-on-my-samsung-galaxy-device/) for your phone.  Once developer options have been turned on it should be possible to interact with the running phone browser session on your development machine by going here [chrome://inspect/#devices](chrome://inspect/#devices) in chrome.  There are a couple of ways to discover the phone from the development machine but the easiest and most consistent is probably to plug in over usb (it is also the best in my opinion as the phone battery likely will be drained fairly quickly when using the camera for AR).
