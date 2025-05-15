@@ -4,6 +4,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="main.css">
 
     <title>Location Based AR of SondeHub API points</title>
 
@@ -20,40 +21,6 @@
       }
       
     </script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 50px;
-        }
-        .container {
-            max-width: 300px;
-            margin: 0 auto;
-        }
-        input {
-            width: 100%;
-            margin: 10px 0;
-            padding: 10px;
-            font-size: 16px;
-        }
-        .button-container {
-            width: 100%;
-            padding: 10px;
-            display: flex;
-            justify-content: center;
-        }
-        button {
-            padding: 10px;
-            font-size: 16px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -69,7 +36,7 @@
         document.getElementById('submitButton').addEventListener('click', function() {
             const text1 = document.getElementById('sondehub-id').value;
             const text2 = document.getElementById('altitude').value;
-            // alert(`Text Box 1: ${text1}\nText Box 2: ${text2}`);
+            
             window.open(`/locatesonde-webxr.html?id=${text1}&camAlt=${text2}`, '_blank');
         });
     </script>
