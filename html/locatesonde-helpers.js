@@ -1,10 +1,12 @@
-// declare heading maybe should toss these things into an object to pollute a bit less
-	// an event handler will keep this up to date as the heading to magnetic north in rads
-let heading;
+// // declare heading maybe should toss these things into an object to pollute a bit less
+// 	// an event handler will keep this up to date as the heading to magnetic north in rads
+// let heading;
 
 // this all is used to determine the compass heading
 	// taken from stackoverflow here: https://stackoverflow.com/questions/61336948/calculating-the-cardinal-direction-of-a-smartphone-with-js
 const handleOrientation = (event) => {
+	let heading;
+
     if(event.webkitCompassHeading) {
         // some devices don't understand "alpha" (especially IOS devices)
         heading = event.webkitCompassHeading;
@@ -12,7 +14,10 @@ const handleOrientation = (event) => {
     else{
         heading = compassHeading(event.alpha, event.beta, event.gamma);
     }
-    // console.log(heading);
+
+    let headingBox = document.getElementById('heading')
+    headingBox.value = `${Math.round(heading*180/Math.PI)}°`;
+    headingBox.data = heading
 };
 const compassHeading = (alpha, beta, gamma) => {
 
