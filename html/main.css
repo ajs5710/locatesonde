@@ -34,3 +34,9 @@ button:hover {
 ul {
   list-style: none;
 }
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}

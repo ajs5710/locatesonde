@@ -22,8 +22,13 @@ services:
     image: "ngrok/ngrok"
     ports: 
       - "4040:4040"
-    env_file: "ngrok.env"
-    command: http nginx:80
+    command:
+      - "start"
+      - "--all"
+      - "--config"
+      - "/ngrok.yml"
+    volumes:
+      - ./ngrok.yml:/ngrok.yml
     networks:
       - ngrok
     depends_on:

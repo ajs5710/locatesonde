@@ -5,7 +5,8 @@ This is a project to take something being tracked by https://amateur.sondehub.or
 The project is made of static pages but currently uses an nginx server to get around some CORS issues with the amateur.sondehub api.  Additionally, it uses ngrok to expose the running nginx for development purposes as it really is meant to be viewed from a phone.
 Currently, the project is really only able to be used in chrome.
 
-You will need to copy the ngrok.env.example file as just ngrok.env and then to replace the `<authtoken>` in the ngrok.env file with a valid ngrok authtoken.
+You will need to copy the ngrok.yml.example file as just ngrok.yml and then to replace the `<authtoken>` in the ngrok.env file with a valid ngrok authtoken.
+You can also create a custom domain through the ngrok [dashboard](https://dashboard.ngrok.com/domains) and assign it using that file.  It may be worthwhile to do so as otherwise the ngrok url will be randomized each time the container is restarted.
 
 To start both the nginx and ngrok instances run `docker-compose up` in the root of the project.  
 Note that the ngrok url will change each time that the container is stopped/started so it may be worthwhile to start nginx and ngrok separately (by specifying the name of the service after e.g. `docker-compose up nginx`) if doing work on the nginx config itself.

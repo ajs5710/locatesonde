@@ -13,25 +13,19 @@
 	        }
 	      }
 	    </script>
-	    <script src="locatesonde-helpers.js"></script>
 	</head>
 	<body>
 
-		<div class="container">
+		<!-- this will be filled in by the datacollection.js file -->
+		<div id="datacollection" class="container">
 	        <h1>Preparing AR</h1>
-	        
-			<input type="text" id="heading" disabled="true" placeholder="GeoMagnetic Heading">
-
-			<input type="text" id="location" disabled="true" placeholder="Lat, Lon">
-
-			<input type="text" id="altitude" disabled="true" placeholder="Altitude in Meters">
-	        
-			<input type="text" id="data" disabled="true" placeholder="Points Received">
 	    </div>
 
 		<script type="module">
 
             import * as THREE from 'three';
+            import { WorldView } from "./worldview.js";
+            import { DataCollection } from "./locatesonde-datacollection.js"
 			import { ARButton } from 'three/addons/webxr/ARButton.js';
 
 			var camera, scene, renderer;
@@ -44,102 +38,33 @@
 			// how far away to render balloon points accurately - beyond this they stop scaling and are drawn in blue instead of green
 			const farRenderLimit = 10000;
 
+			// how frequently to check for new data in minutes
+			const pollingFrequency = 5;
+
 			const balloonGeometry = new THREE.SphereGeometry(balloonRadius, 32, 16)
 
 			const redMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 			const blueMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.75 });
 			const greenMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 
-			let points = [];
+			let points = {};
 
-			// a point for debugging
-			let refPoint;
+			// // a point for debugging
+			// let refPoint;
 
+	        const urlParams = new URLSearchParams(window.location.search);
 
+			// declare worldview so it's in the global scope for convenience
+			let worldView;
 
-
-			function WorldView(lat, lon, alt) {
-				// we'll use a standard radius here (in meters) but there should be a way to calculate a more accurate radius for the position of the phone given a lat/lon
-					// something along the lines of https://gis.stackexchange.com/questions/242188/calculating-the-earth-radius-at-latitude
-					// probably won't matter much while the balloon is close-ish to you
-				const earthRadius = 6378137;
-
-				// this is the forward direction of the scene (we'll use it for our orientation to start)
-				const localForward = new THREE.Vector3(0, 0, -1);
-				// rotate the point so that it aligns with the plane's up
-				const localUp = new THREE.Vector3(0, 1, 0);
-
-				// the lat,lon of the north pole localized to the phone's up orientaton... 
-					// it migrates a bit so not sure if it's perfectly accurate...
-					// we'll use this coordinate to put the pole into our points for when they get rotated
-				let [northPole, northDir] = calcPosFromLatLonAltRad(
-					84.99962969478257, 
-					162.86642064241886,
-					0, 
-					earthRadius
-				);
-				this.northPole = northPole;
-
-
-				let [origin, up] = calcPosFromLatLonAltRad(lat, lon, alt, earthRadius);
-				this.origin = origin;
-				this.rotationAxis = up.clone().cross(localUp);
-				this.rotationAngle = up.angleTo(localUp);
-
-				// localizes the point (in memory!) and returns it
-				this.localizePoint = function(point){
-					// localize magnitude/direction
-					point.sub(this.origin);
-					// rotate it into the plane of the worldview
-					point.applyAxisAngle(this.rotationAxis, this.rotationAngle);
-
-					return point;
-				}
-				this.localizePoint(this.northPole);
-				// we only care about this in the same plane as us so discard its elevation
-				this.northPole.setY(0);
-
-
-				// calculate dir from phone to northpole after up rotation
-				northDir = northPole.clone().normalize();
-				// calculate offset of north pole
-					// we'll use this to first align the north pole to the forward direction in the scene
-					// then later we'll use our compass heading to align the scene with the world
-				const northPoleOffset = localForward.angleTo(northDir);
-				// rotate north pole around up dir to align to forward of scene 
-					// we probably don't really need this anymore
-				this.northPole.applyAxisAngle(localUp, -northPoleOffset);
-
-
-
-				// function fully orients the point to the plane and such that forward of the scene is north
-				this.localizeLatLonAlt = function(lat, lon, alt){
-					// calculate point in 3d
-					let [point, up] = calcPosFromLatLonAltRad(lat, lon, alt, earthRadius)
-
-					// localizes the point to the origin
-					this.localizePoint(point);
-					
-					// rotate the point around up dir to align to forward of scene
-					point.applyAxisAngle(localUp, -northPoleOffset);
-
-					return point;
-				}
-
-				// function to orient points to heading
-			}
-			// WorldView.prototype.addPoint = function(lat, lon, alt) {
-
-			// 	this.points.push();
-			// };
-
-
+			// init data collection
+			DataCollection.beginCollectingData();
+			
 
 			init();
 			animate();
 
 			function init() {
-
 				const container = document.createElement( 'div' );
 				document.body.appendChild( container );
 
@@ -153,197 +78,135 @@
 				renderer.setSize( window.innerWidth, window.innerHeight );
 				renderer.setAnimationLoop( animate );
 				renderer.xr.enabled = true;
+				// renderer.xr.addEventListener( 'sessionstart', function ( event ) {
+				// 	// ar starts
+				// });
+				renderer.xr.addEventListener( 'sessionend', function ( event ) {
+				    // reset camera position and angles
+				    console.log("AR exited, reset camera");
+				    camera.position.set(0,0,0);
+				    camera.setRotationFromEuler(new THREE.Euler(0,0,0));
+
+				    // TODO: reinitialize datacollection/worldview?
+				});
 				container.appendChild( renderer.domElement );
 
 				// adds the button to Start AR to the DOM
 				let startAR = ARButton.createButton( renderer );
+				// disable the ar button until we're ready
 				startAR.disabled = true;
 				document.body.appendChild( startAR );
 
 				controller = renderer.xr.getController( 0 );
-				// controller.addEventListener( 'select', onSelect );
 				scene.add( controller );
 
+				// declare a horizon object and add to the scene
+					// we'll add points as being local to the horizon and rotate the horizon object to match the compass heading
+				let horizon = new THREE.Mesh(
+					new THREE.CylinderGeometry(balloonRadius, balloonRadius, 0.01, 32, 1), 
+					new THREE.MeshBasicMaterial({ color: 0x523507, transparent: true, opacity: 0.5 })
+				);
+				// I'd prefer to raise the camera instead of lowering the horizon but starting ar 
+				horizon.position.copy(new THREE.Vector3(0,-1.5,0));
+				scene.add(horizon);
 
-
-		        const urlParams = new URLSearchParams(window.location.search);
-        		const callsign = urlParams.get("id")
-
-				// converting the lat/lon/altitude into position relative to camera
-				navigator.geolocation.getCurrentPosition(function(position){
-					// // this is where our phone is in cartesian space
-					// 	// we'll use this as an origin for future calculations 
-					// 	// we'll also use this as the direction of up
-					// const [phonePos, phoneUp] = calcPosFromLatLonAltRad(
-					// 	position.coords.latitude, 
-					// 	position.coords.longitude, 
-					// 	position.coords.altitude, 
-					// 	earthRadius
-					// );
-
-					let worldView = new WorldView(
-						position.coords.latitude,
-						position.coords.longitude,
-						position.coords.altitude
-					);
-
-					// let rotationAxis = phoneUp.clone().cross(localUp);
-					// let rotationAngle = phoneUp.angleTo(localUp);
-
-					// draw a circle to be the ground/represent the horizon (useful for debugging)
-					let horizon = new THREE.Mesh(
-						new THREE.CylinderGeometry(balloonRadius, balloonRadius, 0.01, 32, 1), 
-						new THREE.MeshBasicMaterial({ color: 0x523507, transparent: true, opacity: 0.5 })
-					);
-					// assume the ground is approximately one meter below us
-					horizon.position.set(0,-1,0);
-					scene.add(horizon);
-
-
-					// // localize the coordinates of the northpole to the phone for origin and up direction
-					// // make the point relative to the origin
-					// northPole.sub(phonePos);
-					// // rotate the point around the rotation axis to align up dir
-					// northPole.applyAxisAngle(rotationAxis, rotationAngle);
-					// // we only care about this in the same plane as us so discard its elevation
-					// northPole.setY(0);
-
-					// // calculate dir from phone to northpole after up rotation
-					// northDir = northPole.clone()
-					// northDir.normalize();
-					// // calculate offset of north pole
-					// 	// we'll use this to first align the north pole to the forward direction in the scene
-					// 	// then later we'll use our compass heading to align the scene with the world
-					// const northPoleOffset = localForward.angleTo(northDir);
-					// // rotate north pole around up dir to align to forward of scene 
-					// 	// we probably don't really need this but it helps with troubleshooting to have it
-					// northPole.applyAxisAngle(localUp, -northPoleOffset);
-
-					// draw a red point out 50 m from the camera
-					refPoint = new THREE.Mesh(balloonGeometry, redMat);
-					// refPoint.position.copy(new THREE.Vector3(0, 0, -50));
-					refPoint.position.copy(
-						worldView.northPole.clone().normalize().multiplyScalar(50)
-					);
-
-					refPoint.worldView = refPoint.position.clone()
-
-					// // // adjust the refpoint position based on heading
-					// let headedNorth = northPole.clone();
-					// headedNorth.applyAxisAngle(localUp, heading);
-					// // console.log(`adjusted north ${heading*180/Math.PI}`)
-					// refPoint.position.copy(headedNorth);
-					// // console.log(northPole)
-					// // console.log(headedNorth)
-					// // console.log(`adjusted heading by ${heading*180/Math.PI} now is ${headedNorth.angleTo(northPole)*180/Math.PI}`);
-					scene.add(refPoint);
-
-
-					// console.log(position);
-					fetch("/api?duration=6h&payload_callsign=" + callsign, {redirect: 'follow'}).then(response => {
-						if (!response.ok) {
-							throw new Error(`HTTP error! status: ${response.status}`);
-						}
-						return response.json();
-					}).then(data => {
-						// console.log(`offset in degrees ${northPoleOffset*180/Math.PI}`);
-						// console.log(`heading in degrees ${heading*180/Math.PI}`);
-						let prevPoint;
-						console.log(data);
-						/*Object.values(data[callsign]).forEach((dataPoint) => {
-							let [point, upPoint] = calcPosFromLatLonAltRad(dataPoint.lat, dataPoint.lon, dataPoint.alt, earthRadius);
-
-							// take the point and localize it for a plane defined by a point and a direction (the camera)
-							// make the point relative to the origin
-							point.sub(phonePos);
-							// rotate the point around the rotation axis to align up
-							point.applyAxisAngle(rotationAxis, rotationAngle);
-							// rotate the point around up dir to align to forward of scene
-							point.applyAxisAngle(localUp, -northPoleOffset);
-
-
-							// adjust the altitude to be the altitude of the point - the phone's altitude
-							// point.y = dataPoint.alt - position.coords.altitude;
-
-							// if the point would be too far away adjust to still be in render range but change color
-							let pointColor = greenMat;
-							// if the point is outside of our render distance then set it to the edge of render distance and draw it with a different color
-							if (point.length() >= farRenderLimit){
-								pointColor = blueMat;
-								point.setLength(farRenderLimit*0.95);
-							}
-
-							// skip drawing this point if it is too similar to the previous point
-							if (prevPoint){ 
-								console.log(`${prevPoint.toArray()} => ${point.toArray()}`)
-								if (prevPoint.distanceTo(point) < balloonSignificantTravel){
-									console.log("too close skipping " + prevPoint.distanceTo(point))
-									return;
-								}
-							}
-
-							// draw a circle for the point
-							let circlePoint = new THREE.Mesh(balloonGeometry, pointColor);
-
-							circlePoint.position.copy(point);
-							circlePoint.worldView = circlePoint.position.clone();
-							points.push(circlePoint);
-							// scene.add(circlePoint);
-							scene.add(circlePoint);
-
-							// draw a line between the previous point and this one
-							if (prevPoint) {
-								//between the circle positions
-								let geometry = new THREE.BufferGeometry().setFromPoints( [prevPoint, point] );
-								// draw a blue line
-								let line = new THREE.Line(geometry, blueMat);
-								// scene.add(line);
-								scene.add(line);
-							} else {
-								// draw a line from us to the first point
-								let geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-1,0), point])
-								// draw a red line from our feet to the first point
-								let line = new THREE.Line(geometry, redMat);
-								// scene.add(line);
-								scene.add(line);
-							}
-							prevPoint = point;
-
-				        });*/
-
-
+				// start checking to see if we are ready to initialize AR
+					// we'll init a few more things inside of here
+				let checkArReady = setInterval(function(){
+					console.log("is AR ready?");
+					if (
+						DataCollection.heading.radians && 
+						DataCollection.location.latitude &&
+						DataCollection.location.longitude && 
+						DataCollection.altitude.altitude
+					){
+						// we've got all the data needed to orient AR
+						console.log("AR ready");
 						// enable the Start AR button now that data has loaded
 						startAR.disabled = false;
 						startAR.style.backgroundColor = 'blue';
-					});
-				});
 
+						// and we can initialize the worldview
+						worldView = new WorldView(
+							DataCollection.location.latitude, 
+							DataCollection.location.longitude, 
+							DataCollection.altitude.altitude
+						);
 
-				// TODO: rotate the x,z of horizon to be based on where camera is facing when ar starts?
-				// for now might make sense to just point north with the compass app before starting ar
-				// TODO: move the math functions to their own files
+						// add a refernce point to represent the north direction
+						let refPoint = new THREE.Mesh(balloonGeometry, redMat);
+						refPoint.position.copy(horizon.localToWorld(worldView.northPole).clampLength(50,150));
+						horizon.attach(refPoint);
 
+						// update orientation of horizon to match heading
+						setInterval(function(){
+							// only if we're not currently in AR
+								// if we're updating the horizon in AR it'd spin twice as fast basically
+								// probably a better way to do this than checking the button text
+							if (startAR.textContent == "START AR"){
+								horizon.setRotationFromEuler(new THREE.Euler(0, DataCollection.heading.radians, 0));
+							}
+						}, 10);
 
-				window.addEventListener( 'resize', onWindowResize );
+						// declare a variable to reference to the last processed point object
+							// we'll use for drawing lines and for some naive line simplification
+						let prevBalloon;
 
-				// // move points around to match north
-				// let orientHeading = setInterval(function(){
-				// 	// console.log(`align to heading ${heading}`)
-				// 	// should only happen while AR isn't active
-				// 	if (!startAR.disabled){
-				// 		refPoint.position.copy(refPoint.worldView.clone().applyAxisAngle(localUp, heading));
+						// setup the polling for our callsign 
+							// we could have loaded it earlier but we weren't ready to process any returned data until now
+			    		let pollData = function(){
+			    			DataCollection.pollData(urlParams.get("id")).then((newData) => {
+			    				console.log("polled api");
+			    				
+			    				// process adding the new data points
+			    				newData.forEach((point) => {
+			    					let localPoint = worldView.localizeLatLonAlt(point.lat, point.lon, point.alt);
+			    					let worldPoint = horizon.localToWorld(localPoint);
+			    					
+			    					let lineColor = blueMat;
+			    					// if this would be the first point
+			    					if (!prevBalloon){
+			    						lineColor = redMat;
+			    						prevBalloon = horizon;
+			    					}
 
-				// 		points.forEach((point) => {
-				// 			point.position.copy(point.worldView.clone().applyAxisAngle(localUp, heading));
-				// 		});
-				// 	}
-				// }, 100);
+			    					// check if the prevpoint is some reasonable distance away (naive line simplification)
+			    					if (prevBalloon.position.distanceTo(worldPoint) >= balloonSignificantTravel){
+			    						console.log("adding point")
 
-				// // probably a better if could be done above to just see that we're not in ar currently
-				// startAR.addEventListener("click", function(){
-				// 	console.log("stop moving points around")
-				// 	clearInterval(orientHeading);
-				// })
+			    						// draw the balloon point
+			    							// TODO: what to do if points are outside of our render distance
+										let balloon = new THREE.Mesh(balloonGeometry, greenMat);
+										balloon.position.copy(worldPoint);
+										horizon.attach(balloon);
+
+			    						// draw line between previous and new balloon positions
+										let geometry = new THREE.BufferGeometry().setFromPoints( [
+											prevBalloon.localToWorld(new THREE.Vector3(0,0,0)), 
+											worldPoint
+										] );
+										let line = new THREE.Line(geometry, lineColor);
+										horizon.attach(line);
+	
+										// keep track of last drawn balloon
+				    					prevBalloon = balloon;
+			    					} else {
+			    						console.log("skipping point")
+			    					}
+
+			    				})
+			    			}).finally(() => {
+			    				// setup the next polling event (a recursive call with a delay basically)
+			    				setTimeout(pollData, pollingFrequency*60*1000);
+			    			})
+			    		}
+			    		// start the polling for the callsign
+			    		pollData();
+
+			    		// AR is ready cancel the check and complete the init
+						clearInterval(checkArReady);
+					}
+				}, 200);
 			}
 
 
@@ -357,21 +220,6 @@
 			//
 			function animate() {
 				renderer.render( scene, camera );
-			}
-
-			// function to convert lat/lon to coordinates taken from
-			// https://stackoverflow.com/questions/28365948/javascript-latitude-longitude-to-xyz-position-on-earth-threejs/28367325#28367325
-			function calcPosFromLatLonAltRad(lat, lon, alt, radius){
-				var phi   = (90-lat)*(Math.PI/180);
-				var theta = (lon+180)*(Math.PI/180);
-
-				let x = -((radius) * Math.sin(phi)*Math.cos(theta));
-				let z = ((radius) * Math.sin(phi)*Math.sin(theta));
-				let y = ((radius) * Math.cos(phi));
-			    
-				let cartPos = new THREE.Vector3(x, y, z);
-				let cartUp = (cartPos.clone()).normalize();
-				return [cartPos.add(cartUp.clone().multiplyScalar(alt)), cartUp];
 			}
 
 
